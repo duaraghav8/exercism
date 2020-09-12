@@ -11,20 +11,16 @@ func (c *cell) Value() int {
 	return c.value
 }
 
-func (c *cell) setValue(v int) {
+type inputCell struct {
+	*cell
+}
+
+func (c *inputCell) SetValue(v int) {
 	if c.value == v {
 		return
 	}
 	c.value = v
 	c.r.refresh()
-}
-
-type inputCell struct {
-	*cell
-}
-
-func (ic *inputCell) SetValue(v int) {
-	ic.setValue(v)
 }
 
 type callback struct {
@@ -58,10 +54,9 @@ type reactor struct {
 
 func (r *reactor) CreateInput(i int) InputCell {
 	c := &cell{
-		r:                 r,
-		value:             i,
-		onRefresh:         func() {},
-		onUpdateCallbacks: make([]*callback, 0, 0),
+		r:         r,
+		value:     i,
+		onRefresh: func() {},
 	}
 
 	r.trackCell(c)
@@ -69,12 +64,14 @@ func (r *reactor) CreateInput(i int) InputCell {
 }
 
 func (r *reactor) CreateCompute1(c Cell, f func(int) int) ComputeCell {
-	newCell := &cell{
-		r:                 r,
-		onUpdateCallbacks: make([]*callback, 0, 0),
-	}
+	newCell := &cell{r: r}
 	newCell.onRefresh = func() {
-		newCell.value = f(c.Value())
+		newVal := f(c.Value())
+		if newVal == newCell.value {
+			return
+		}
+
+		newCell.value = newVal
 
 		for _, cb := range newCell.onUpdateCallbacks {
 			cb.exec(newCell.value)
@@ -89,7 +86,12 @@ func (r *reactor) CreateCompute1(c Cell, f func(int) int) ComputeCell {
 func (r *reactor) CreateCompute2(c1 Cell, c2 Cell, f func(int, int) int) ComputeCell {
 	newCell := &cell{r: r}
 	newCell.onRefresh = func() {
-		newCell.value = f(c1.Value(), c2.Value())
+		newVal := f(c1.Value(), c2.Value())
+		if newVal == newCell.value {
+			return
+		}
+
+		newCell.value = newVal
 
 		for _, cb := range newCell.onUpdateCallbacks {
 			cb.exec(newCell.value)
@@ -116,7 +118,3 @@ func (r *reactor) refresh() {
 func New() Reactor {
 	return &reactor{cells: make([]*cell, 0, 0)}
 }
-
-// todo
-// - onRefresh() functions currently compute the value everytime. Call them only if cell's value actually changes
-// - refactor: move repeated code into a common place
